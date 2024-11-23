@@ -12,6 +12,9 @@ drone.connect()
 print(f"Уровень заряда батареи: {drone.get_battery()}%")
 drone.streamon()
 
+# Загрузка каскадного классификатора для обнаружения лиц
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
 # Функция для обработки команд с клавиатуры
 def getKeyboardInput():
     lr, fb, ud, yv = 0, 0, 0, 0
@@ -30,12 +33,30 @@ def getKeyboardInput():
     elif kc.getKey("d"): yv = speed
 
     if kc.getKey("q"):
-        drone.land()
-        time.sleep(3)
-    if kc.getKey("e"):
-        drone.takeoff()
+        if not drone.is_flying:
+            try:
+                drone.takeoff()
+                print("Дрон взлетел!")
+            except Exception as e:
+                print(f"Ошибка при взлете: {e}")
+        else:
+            try:
+                drone.land()
+                print("Дрон приземлился!")
+            except Exception as e:
+                print(f"Ошибка при приземлении: {e}")
 
     return [lr, fb, ud, yv]
+
+# Функция для отслеживания лица
+def track_face(frame):
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+    if len(faces) > 0:
+        # Предполагаем, что мы отслеживаем первое обнаруженное лицо
+        (x, y, w, h) = faces[0]
+        return (x, y, w, h)  # Возвращаем координаты лица
+    return None
 
 try:
     while True:
@@ -46,6 +67,23 @@ try:
         # Получение видеопотока с камеры дрона
         frame = drone.get_frame_read().frame
         frame = cv2.resize(frame, (640, 480))
+
+        # Отслеживание лица
+        face_position = track_face(frame)
+        if face_position:
+            x, y, w, h = face_position
+            # Рисуем обводку вокруг лица
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+            # Логика управления дроном для следования за лицом
+            center_x = x + w // 2
+            if center_x < 320:  # Если лицо слева от центра
+                vals[0] = -50  # Двигаться влево
+            elif center_x > 320:  # Если лицо справа от центра
+                vals[0] = 50  # Двигаться вправо
+            else:
+                vals[0] = 0  # Остановить движение влево/вправо
+
         cv2.imshow("Tello Camera", frame)
 
         # Выход из программы при нажатии клавиши 'q'
@@ -54,6 +92,11 @@ try:
 except KeyboardInterrupt:
     pass
 finally:
+    try:
+        if drone.is_flying:
+            drone.land()  # Приземление дрона
+    except Exception as e:
+        print(f"Ошибка при приземлении: {e}")
     drone.streamoff()
     cv2.destroyAllWindows()
 qqq
