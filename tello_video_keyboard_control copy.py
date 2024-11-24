@@ -7,7 +7,7 @@ import time
 # Инициализация модуля управления клавиатурой
 kc.init()
 
-# Инициализация дрона
+# Инициализация дронаm
 drone = Tello()
 drone.connect()
 print(f"Уровень заряда батареи: {drone.get_battery()}%")
